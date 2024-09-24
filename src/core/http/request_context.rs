@@ -19,7 +19,7 @@ use crate::core::ir::Error;
 use crate::core::runtime::TargetRuntime;
 use crate::core::{cache, grpc};
 
-#[derive(Setters)]
+#[derive(Debug, Clone, Setters)]
 pub struct RequestContext {
     pub server: Server,
     pub upstream: Upstream,
@@ -30,17 +30,19 @@ pub struct RequestContext {
     pub allowed_headers: HeaderMap,
     pub auth_ctx: AuthContext,
     pub http_data_loaders: Arc<Vec<DataLoader<DataLoaderRequest, HttpDataLoader>>>,
-    pub gql_data_loaders: Arc<Vec<DataLoader<DataLoaderRequest, GraphqlDataLoader>>>,
+    pub gql_data_loaders: Arc<Vec<DataLoader<DataLoaderRequest, GraphqlDataLoader>>>>,
     pub grpc_data_loaders: Arc<Vec<DataLoader<grpc::DataLoaderRequest, GrpcDataLoader>>>,
     pub min_max_age: Arc<Mutex<Option<i32>>>,
     pub cache_public: Arc<Mutex<Option<bool>>>,
     pub runtime: TargetRuntime,
     pub cache: DedupeResult<IoId, ConstValue, Error>,
     pub dedupe_handler: Arc<DedupeResult<IoId, ConstValue, Error>>,
+    pub method: String,
+    pub url: String,
 }
 
 impl RequestContext {
-    pub fn new(target_runtime: TargetRuntime) -> RequestContext {
+    pub fn new(target_runtime: TargetRuntime, dedupe: bool) -> RequestContext {
         RequestContext {
             server: Default::default(),
             upstream: Default::default(),
@@ -56,6 +58,7 @@ impl RequestContext {
             dedupe_handler: Arc::new(DedupeResult::new(false)),
             allowed_headers: HeaderMap::new(),
             auth_ctx: AuthContext::default(),
+            dedupe,
         }
     }
     fn set_min_max_age_conc(&self, min_max_age: i32) {
@@ -181,6 +184,11 @@ impl RequestContext {
             }
         }
     }
+
+    pub fn cache_key(&self) -> String {
+        // Implement a unique cache key based on the request properties
+        format!("{}{}", self.method, self.url)
+    }
 }
 
 impl From<&AppContext> for RequestContext {
@@ -205,6 +213,7 @@ impl From<&AppContext> for RequestContext {
             runtime: app_ctx.runtime.clone(),
             cache: DedupeResult::new(true),
             dedupe_handler: app_ctx.dedupe_handler.clone(),
+            dedupe: false,
         }
     }
 }

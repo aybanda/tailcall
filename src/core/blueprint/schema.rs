@@ -117,3 +117,15 @@ pub fn to_schema<'a>() -> TryFoldConfig<'a, SchemaDefinition> {
             })
     })
 }
+
+#[derive(Debug, Clone)]
+pub struct HTTPDirective {
+    pub path: String,
+    pub dedupe: bool,
+}
+
+impl HTTPDirective {
+    pub fn new(path: String, dedupe: bool) -> Self {
+        HTTPDirective { path, dedupe }
+    }
+}

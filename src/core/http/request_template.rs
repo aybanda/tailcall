@@ -30,6 +30,7 @@ pub struct RequestTemplate {
     pub endpoint: Endpoint,
     pub encoding: Encoding,
     pub query_encoder: QueryEncoder,
+    pub dedupe: bool,
 }
 
 #[derive(Setters, Debug, Clone)]
@@ -183,7 +184,7 @@ impl RequestTemplate {
         req
     }
 
-    pub fn new(root_url: &str) -> anyhow::Result<Self> {
+    pub fn new(root_url: &str, dedupe: bool) -> anyhow::Result<Self> {
         Ok(Self {
             root_url: Mustache::parse(root_url),
             query: Default::default(),
@@ -193,12 +194,13 @@ impl RequestTemplate {
             endpoint: Endpoint::new(root_url.to_string()),
             encoding: Default::default(),
             query_encoder: Default::default(),
+            dedupe,
         })
     }
 
     /// Creates a new RequestTemplate with the given form encoded URL
     pub fn form_encoded_url(url: &str) -> anyhow::Result<Self> {
-        Ok(Self::new(url)?.encoding(Encoding::ApplicationXWwwFormUrlencoded))
+        Ok(Self::new(url, false)?.encoding(Encoding::ApplicationXWwwFormUrlencoded))
     }
 
     pub fn with_body(mut self, body: Mustache) -> Self {
@@ -244,6 +246,7 @@ impl TryFrom<Endpoint> for RequestTemplate {
             endpoint,
             encoding,
             query_encoder: Default::default(),
+            dedupe: false,
         })
     }
 }
@@ -388,7 +391,7 @@ mod tests {
             },
         ];
 
-        let tmpl = RequestTemplate::new("http://localhost:3000/")
+        let tmpl = RequestTemplate::new("http://localhost:3000/", false)
             .unwrap()
             .query(query);
 
@@ -411,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_url() {
-        let tmpl = RequestTemplate::new("http://localhost:3000/").unwrap();
+        let tmpl = RequestTemplate::new("http://localhost:3000/", false).unwrap();
         let ctx = Context::default();
         let req = tmpl.to_request(&ctx).unwrap();
         assert_eq!(req.url().to_string(), "http://localhost:3000/");
@@ -419,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_url_path() {
-        let tmpl = RequestTemplate::new("http://localhost:3000/foo/bar").unwrap();
+        let tmpl = RequestTemplate::new("http://localhost:3000/foo/bar", false).unwrap();
         let ctx = Context::default();
         let req = tmpl.to_request(&ctx).unwrap();
         assert_eq!(req.url().to_string(), "http://localhost:3000/foo/bar");
@@ -427,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_url_path_template() {
-        let tmpl = RequestTemplate::new("http://localhost:3000/foo/{{bar.baz}}").unwrap();
+        let tmpl = RequestTemplate::new("http://localhost:3000/foo/{{bar.baz}}", false).unwrap();
         let ctx = Context::default().value(json!({
           "bar": {
             "baz": "bar"
@@ -441,7 +444,7 @@ mod tests {
     #[test]
     fn test_url_path_template_multi() {
         let tmpl =
-            RequestTemplate::new("http://localhost:3000/foo/{{bar.baz}}/boozes/{{bar.booz}}")
+            RequestTemplate::new("http://localhost:3000/foo/{{bar.baz}}/boozes/{{bar.booz}}", false)
                 .unwrap();
         let ctx = Context::default().value(json!({
           "bar": {
@@ -475,7 +478,7 @@ mod tests {
                 skip_empty: false,
             },
         ];
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .query(query);
         let ctx = Context::default();
@@ -505,7 +508,7 @@ mod tests {
                 skip_empty: false,
             },
         ];
-        let tmpl = RequestTemplate::new("http://localhost:3000/")
+        let tmpl = RequestTemplate::new("http://localhost:3000/", false)
             .unwrap()
             .query(query);
         let ctx = Context::default().value(json!({
@@ -530,7 +533,7 @@ mod tests {
             (HeaderName::from_static("bar"), Mustache::parse("bar")),
             (HeaderName::from_static("baz"), Mustache::parse("baz")),
         ];
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .headers(headers);
         let ctx = Context::default();
@@ -553,7 +556,7 @@ mod tests {
                 Mustache::parse("{{baz.id}}"),
             ),
         ];
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .headers(headers);
         let ctx = Context::default().value(json!({
@@ -572,7 +575,7 @@ mod tests {
 
     #[test]
     fn test_header_encoding_application_json() {
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .method(reqwest::Method::POST)
             .encoding(crate::core::config::Encoding::ApplicationJson);
@@ -586,7 +589,7 @@ mod tests {
 
     #[test]
     fn test_header_encoding_application_x_www_form_urlencoded() {
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .method(reqwest::Method::POST)
             .encoding(crate::core::config::Encoding::ApplicationXWwwFormUrlencoded);
@@ -600,7 +603,7 @@ mod tests {
 
     #[test]
     fn test_method() {
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .method(reqwest::Method::POST);
         let ctx = Context::default();
@@ -610,7 +613,7 @@ mod tests {
 
     #[test]
     fn test_body() {
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .body_path(Some(Mustache::parse("foo")));
         let ctx = Context::default();
@@ -620,7 +623,7 @@ mod tests {
 
     #[test]
     fn test_body_template() {
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .body_path(Some(Mustache::parse("{{foo.bar}}")));
         let ctx = Context::default().value(json!({
@@ -634,7 +637,7 @@ mod tests {
 
     #[test]
     fn test_body_encoding_application_json() {
-        let tmpl = RequestTemplate::new("http://localhost:3000")
+        let tmpl = RequestTemplate::new("http://localhost:3000", false)
             .unwrap()
             .encoding(crate::core::config::Encoding::ApplicationJson)
             .body_path(Some(Mustache::parse("{{foo.bar}}")));
@@ -790,7 +793,7 @@ mod tests {
 
         #[test]
         fn test_with_string() {
-            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .body_path(Some(Mustache::parse("{{foo.bar}}")));
             let ctx = Context::default().value(json!({"foo": {"bar": "baz"}}));
@@ -801,7 +804,7 @@ mod tests {
 
         #[test]
         fn test_with_json_template() {
-            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .body_path(Some(Mustache::parse(r#"{"foo": "{{baz}}"}"#)));
             let ctx = Context::default().value(json!({"baz": "baz"}));
@@ -811,7 +814,7 @@ mod tests {
 
         #[test]
         fn test_with_json_body() {
-            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .body_path(Some(Mustache::parse("{{foo}}")));
             let ctx = Context::default().value(json!({"foo": {"bar": "baz"}}));
@@ -821,7 +824,7 @@ mod tests {
 
         #[test]
         fn test_with_json_body_nested() {
-            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .body_path(Some(Mustache::parse("{{a}}")));
             let ctx = Context::default()
@@ -833,7 +836,7 @@ mod tests {
 
         #[test]
         fn test_with_mustache_literal() {
-            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let tmpl = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .body_path(Some(Mustache::parse(r#"{"foo": "bar"}"#)));
             let ctx = Context::default().value(json!({}));
@@ -863,16 +866,16 @@ mod tests {
         fn test_url_diff() {
             let ctx = Context::default().value(json!({}));
             assert_no_duplicate([
-                RequestTemplate::form_encoded_url("http://localhost:3000/1")
+                RequestTemplate::form_encoded_url("http://localhost:3000/1", false)
                     .unwrap()
                     .cache_key(&ctx),
-                RequestTemplate::form_encoded_url("http://localhost:3000/2")
+                RequestTemplate::form_encoded_url("http://localhost:3000/2", false)
                     .unwrap()
                     .cache_key(&ctx),
-                RequestTemplate::form_encoded_url("http://localhost:3001/1")
+                RequestTemplate::form_encoded_url("http://localhost:3001/1", false)
                     .unwrap()
                     .cache_key(&ctx),
-                RequestTemplate::form_encoded_url("http://localhost:3001/2")
+                RequestTemplate::form_encoded_url("http://localhost:3001/2", false)
                     .unwrap()
                     .cache_key(&ctx),
             ]);
@@ -887,16 +890,16 @@ mod tests {
             };
 
             assert_no_duplicate([
-                RequestTemplate::form_encoded_url("http://localhost:3000")
+                RequestTemplate::form_encoded_url("http://localhost:3000", false)
                     .unwrap()
                     .cache_key(&auth_header_ctx("Authorization", "abc".parse().unwrap())),
-                RequestTemplate::form_encoded_url("http://localhost:3000")
+                RequestTemplate::form_encoded_url("http://localhost:3000", false)
                     .unwrap()
                     .cache_key(&auth_header_ctx("Authorization", "bcd".parse().unwrap())),
-                RequestTemplate::form_encoded_url("http://localhost:3000")
+                RequestTemplate::form_encoded_url("http://localhost:3000", false)
                     .unwrap()
                     .cache_key(&auth_header_ctx("Range", "bytes=0-100".parse().unwrap())),
-                RequestTemplate::form_encoded_url("http://localhost:3000")
+                RequestTemplate::form_encoded_url("http://localhost:3000", false)
                     .unwrap()
                     .cache_key(&auth_header_ctx("Range", "bytes=0-".parse().unwrap())),
             ]);
@@ -906,22 +909,22 @@ mod tests {
         fn test_body_diff() {
             let ctx_with_body = |value| Context::default().value(value);
 
-            let key_123_1 = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let key_123_1 = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .with_body(Mustache::parse("{{args.value}}"))
                 .cache_key(&ctx_with_body(json!({"args": {"value": "123"}})));
 
-            let key_234_1 = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let key_234_1 = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .with_body(Mustache::parse("{{args.value}}"))
                 .cache_key(&ctx_with_body(json!({"args": {"value": "234"}})));
 
-            let key_123_2 = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let key_123_2 = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .with_body(Mustache::parse("{{value.id}}"))
                 .cache_key(&ctx_with_body(json!({"value": {"id": "123"}})));
 
-            let key_234_2 = RequestTemplate::form_encoded_url("http://localhost:3000")
+            let key_234_2 = RequestTemplate::form_encoded_url("http://localhost:3000", false)
                 .unwrap()
                 .with_body(Mustache::parse("{{value.id2}}"))
                 .cache_key(&ctx_with_body(

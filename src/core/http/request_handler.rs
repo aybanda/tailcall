@@ -25,6 +25,37 @@ use crate::core::jit::JITExecutor;
 
 pub const API_URL_PREFIX: &str = "/api";
 
+lazy_static! {
+    static ref CACHE: Arc<Mutex<HashMap<String, HTTPResponse>>> = Arc::new(Mutex::new(HashMap::new()));
+}
+
+pub fn handle_http_request(context: &RequestContext) -> HTTPResponse {
+    let cache_key = generate_cache_key(context);
+    
+    if let Some(cached_response) = get_cached_response(&cache_key) {
+        return cached_response;
+    }
+    
+    let response = make_http_request(context);
+    cache_response(&cache_key, &response);
+    response
+}
+
+fn generate_cache_key(context: &RequestContext) -> String {
+    // Generate a unique key based on the request properties
+    format!("{}{}", context.method, context.url)
+}
+
+fn get_cached_response(key: &str) -> Option<HTTPResponse> {
+    let cache = CACHE.lock().unwrap();
+    cache.get(key).cloned()
+}
+
+fn cache_response(key: &str, response: &HTTPResponse) {
+    let mut cache = CACHE.lock().unwrap();
+    cache.insert(key.to_string(), response.clone());
+}
+
 fn prometheus_metrics(prometheus_exporter: &PrometheusExporter) -> Result<Response<Body>> {
     let metric_families = prometheus::default_registry().gather();
     let mut buffer = vec![];
